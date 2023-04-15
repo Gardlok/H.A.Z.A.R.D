@@ -14,6 +14,7 @@ Playing around with muxing different tools in order to create am IDE-like termin
 ## Expect:
 Bootstrapping configs
 Config backups, profiling, and syncing
+Shortcut-key maps, command completions, and interactive guidance
 
 ## Don't expect:
-To satisfy/accommodate  everyones' _requirements_
+To make everyone happy
