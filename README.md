@@ -12,9 +12,12 @@ Playing around with muxing different tools in order to create am IDE-like termin
 - Development
 
 ## Expect:
-Bootstrapping configs
-Config backups, profiling, and syncing
-Shortcut-key maps, command completions, and interactive guidance
+- Bootstrapping configs
+- Profiles for varying user, environment, and/or project. Including Roaming, Local, and Ghost.  
+- Config backups, profiling, and syncing
+- Shortcut-key maps, command completions, and interactive guidance
+- Built-in Documentation on the Rust ecosystem and packages for offline accessability and unified traversing
+- Crates.io search pane with Cargo integration for effortless package management  
 
 ## Don't expect:
-To make everyone happy
+- To make everyone happy
