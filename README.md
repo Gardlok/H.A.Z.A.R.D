@@ -5,10 +5,10 @@ Playing around with muxing different tools in order to create am IDE-like termin
 
 ## Stack-ronym: 
 - Helix 
-- Alacrity
+- A (Askama?)
 - Zellij
-- Awesome
-- Rust
+- A (Axum?)
+- Research
 - Development
 
 ## Expect:
@@ -24,9 +24,8 @@ Playing around with muxing different tools in order to create am IDE-like termin
   - Study/Experiment
 - IDEaaS - Network accessible, hosted locally or cloud based
 - Templating system
+- RSS support
 
-## Don't expect:
-- To make everyone happy
 
 ## Hazard 
 
