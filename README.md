@@ -1,15 +1,16 @@
-# H.A.Z.A.R.D
+# H.A.Z.A.R.D.S
 Collaborating a set of tools developed primarily by Rust 
 
 Playing around with muxing different tools in order to create am IDE-like terminal environment. I am approaching this with a simple (until it's not) goal: By Rust, for Rust!
 
 ## Stack-ronym: 
 - Helix 
-- Askama
+- Async-std
 - Zellij
 - Axum
 - Rhai
-- Development
+- 
+- Surreal
 
 ## Expect:
 - Bootstrapping configs
