@@ -5,9 +5,9 @@ Playing around with muxing different tools in order to create am IDE-like termin
 
 ## Stack-ronym: 
 - Helix 
-- A (Askama?)
+- Askama
 - Zellij
-- A (Axum?)
+- Axum
 - Research
 - Development
 
