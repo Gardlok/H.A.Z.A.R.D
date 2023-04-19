@@ -1,0 +1,7 @@
+**zellijuice/plugins/**
+**/.cargo/**
+
+
+# Added by cargo
+
+/target

@@ -1,0 +1,22 @@
+layout {
+    pane split_direction="horizontal" {
+        pane size="3%" borderless=true {
+            plugin location="zellij:tab-bar"
+        }
+        pane size="69%" split_direction="vertical" {
+            pane name="DOIT!" focus=true size="70%" 
+            pane name="assistance" size="30%" stacked=true {
+                pane name="My Stuff" {
+                    plugin location="zellij:strider"
+                }
+                pane name="KeyMap"
+                pane name="Tools"
+                pane name="Console"
+            } 
+        }
+        pane name="Debug" size="20%" 
+        pane name="This is a good spot for an inspirational quote or addage!" {
+            plugin location="zellij:status-bar"
+        }
+    }
+}
