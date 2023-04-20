@@ -1,6 +1,6 @@
 mod base;
 mod order;
-use base::protocols::{DirectKast, MessageType, SharedKast, SubKast};
+use base::protocols::{InterOps, KanalOps, MessageType};
 
 use order::pallet::home;
 

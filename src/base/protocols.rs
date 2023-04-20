@@ -1,4 +1,5 @@
 #![warn(rust_2018_idioms)]
+#![feature(async_fn_in_trait)]
 use std::{
     collections::{hash_map::DefaultHasher, HashMap},
     env,
@@ -33,56 +34,71 @@ pub enum MessageType {
 // ////////////////////////////////////////////////////////////////////////
 // LoKal Interopts
 // /////////////////////////////////////////////////////////
-pub trait Kaster<T> {
-    fn new() -> T;
-    fn duo() -> (T, T);
-    fn share(T: Self) -> T;
+
+struct Id(usize);
+
+pub struct KanalComm {
+    id: Id,
+    broadkast: KanalOps,
+    directs: HashMap<usize, AsyncSender<MessageType>>,
+    subsciptions: HashMap<usize, AsyncReceiver<MessageType>>,
 }
 
-pub struct InteropComm {
-    shared: SharedKast<MessageType>,
-    directs: HashMap<u8, AsyncSender<MessageType>>,
-    subsciptions: HashMap<u8, AsyncReceiver<MessageType>>,
+pub struct KanalOps {
+    id: usize,
+    tx: AsyncSender<MessageType>,
+    rx: AsyncReceiver<MessageType>,
 }
 
-pub type SharedKast<T> = (AsyncSender<T>, AsyncReceiver<T>);
-pub type DirectKast<T> = (AsyncSender<T>, AsyncReceiver<T>);
-pub type SubKast<T> = (AsyncSender<T>, AsyncReceiver<T>);
-
-impl<T> Kaster<T> for SharedKast<T> {
-    fn new() -> SharedKast<T> {
-        Kaster::unbounded_async()
-    }
-
-    fn share(original: dyn Kaster<T>) -> dyn Kaster<T> {
-        let replica = original.clone();
-        Some(replica)
-    }
+pub trait InterOps {
+    fn new(size: Option<usize>) -> Self;
+    fn new_paired(size: Option<usize>) -> (Self, Self);
+    fn share() -> Self;
+    fn register() -> Result<(), ReceiveError>;
 }
 
-impl<T> Kaster<T> for DirectKast<T> {
-    fn duo(size: u8) -> (DirectKast<T>, DirectKast<T>) {
-        (kanal::bounded_async(size), kanal::bounded_async(size))
+impl InterOps for KanalOps {
+    fn new(capacity: Option<usize>) -> KanalOps {
+        let (tx, rx) = match capacity {
+            None => kanal::unbounded_async(),
+            Some(cap) => kanal::bounded_async(cap),
+        };
+        KanalOps { id: 0, tx, rx }
     }
 
-    fn share(original: dyn Kaster<T>) -> dyn Kaster<T> {
-        let replica = original.clone();
-        Some(replica)
-    }
-}
+    fn new_paired(capacity: Option<usize>) -> (KanalOps, KanalOps) {
+        let (tx_a, rx_a, tx_b, rx_b) = match capacity {
+            None => {
+                let (tx_a, rx_a) = kanal::unbounded_async();
+                let (tx_b, rx_b) = kanal::unbounded_async();
+                (tx_a, rx_b, tx_b, rx_a)
+            }
+            Some(cap) => {
+                let (tx_a, rx_a) = kanal::unbounded_async();
+                let (tx_b, rx_b) = kanal::unbounded_async();
+                (tx_a, rx_b, tx_b, rx_a)
+            }
+        };
 
-impl<T> Kaster<T> for SubKast<T> {
-    fn new() -> SubKast<T> {
-        let (service_tx, subscribe_rx) = kanal::unbounded_async();
-        SubKast {
-            service_tx,
-            subscribe_rx,
-        }
+        KanalOps {
+            id: 0,
+            tx: tx_a,
+            rx: rx_a,
+        };
+        KanalOps {
+            id: 0,
+            tx: tx_b,
+            rx: rx_b,
+        };
     }
 
-    fn share(original: dyn Kaster<T>) -> dyn Kaster<T> {
-        let replica = original.clone();
-        Some(replica)
+    fn share(original: KanalOps) -> KanalOps {
+        original.clone()
+    }
+
+    async fn register(self) -> Result<(), ReceiveError> {
+        self.tx.send(MessageType::Poll).await?;
+        self.id = self.rx.recv().await?
     }
 }
 
