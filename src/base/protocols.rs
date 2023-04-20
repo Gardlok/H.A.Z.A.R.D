@@ -1,11 +1,11 @@
 #![warn(rust_2018_idioms)]
 use std::{
     collections::{hash_map::DefaultHasher, HashMap},
+    env,
+    error::Error as StdError,
     hash::{Hash, Hasher},
+    io,
     net::SocketAddr,
-    std::env,
-    std::error::Error,
-    std::io,
 };
 
 use anyhow::{Error, Result};
@@ -16,86 +16,71 @@ use surrealdb::Surreal;
 
 use async_tungstenite::accept_async;
 use futures::SinkExt;
-use kanal::{bounded_async, unbounded_async, AsyncReceiver, AsyncSender, ReceiveError, SendError};
+use kanal::{AsyncReceiver, AsyncSender, ReceiveError, SendError};
 use tokio::net::{TcpListener, TcpStream};
 use tungstenite::{Error as TungError, Message, Result as TungResult};
 //use axum;     //TODO
 
 // ////////////////////////////////////////////////////////////////////////
-// Interopts
+// Common
 // /////////////////////////////////////////////////////////
-pub enum MessageType<T> {
+pub enum MessageType {
     Poll,
     Push,
     Pull,
 }
 
-pub trait Caster<T> {
-    fn new() -> Option<T>;
-    fn share(T: Self) -> Option<T>;
+// ////////////////////////////////////////////////////////////////////////
+// LoKal Interopts
+// /////////////////////////////////////////////////////////
+pub trait Kaster<T> {
+    fn new() -> T;
+    fn duo() -> (T, T);
+    fn share(T: Self) -> T;
 }
 
 pub struct InteropComm {
-    shared: SharedCast<MessageType>,
-    directs: HashMap<id: u8, DirectCast<T>>,
-    subsciptions: HashMap<id: u8, AsyncReceiver<MessageType>>,
+    shared: SharedKast<MessageType>,
+    directs: HashMap<u8, AsyncSender<MessageType>>,
+    subsciptions: HashMap<u8, AsyncReceiver<MessageType>>,
 }
 
-pub type SharedCast<T: MessageType> = (AsyncSender<T>, AsyncReceiver<T>);
-pub type DirectCast<T> = (AsyncSender<T>, AsyncReceiver<T>);
-pub type SubCast<T: MessageType> = (AsyncSender<T>, AsyncReceiver<T>);
+pub type SharedKast<T> = (AsyncSender<T>, AsyncReceiver<T>);
+pub type DirectKast<T> = (AsyncSender<T>, AsyncReceiver<T>);
+pub type SubKast<T> = (AsyncSender<T>, AsyncReceiver<T>);
 
-impl Caster for SharedCast {
-    fn new() -> SharedCast {
-        let (tx, rx) = kanal::unbounded_async::<MessageType>();
-        SharedCast { tx, rx }
+impl<T> Kaster<T> for SharedKast<T> {
+    fn new() -> SharedKast<T> {
+        Kaster::unbounded_async()
     }
 
-    fn share(original: Caster<T>) -> Option<Caster<T>>
-    where
-        T: Clone,
-    {
+    fn share(original: dyn Kaster<T>) -> dyn Kaster<T> {
         let replica = original.clone();
         Some(replica)
     }
 }
 
-impl Caster for DirectCast<T> {
-    fn new(size: usize) -> (DirectCast<T>, DirectCast<T>) {
-        let (tx_a, rx_a) = kanal::bounded_async::<T>(size);
-        let (tx_b, rx_b) = kanal::bounded_async::<T>(size);
-        (
-            DirectCast { tx: tx_a, rx: rx_b },
-            DirectCast { tx: tx_b, rx: rx_a },
-        )
+impl<T> Kaster<T> for DirectKast<T> {
+    fn duo(size: u8) -> (DirectKast<T>, DirectKast<T>) {
+        (kanal::bounded_async(size), kanal::bounded_async(size))
     }
 
-    fn share(original: Caster<T>) -> Option<Caster<T>>
-    where
-        T: Clone,
-    {
+    fn share(original: dyn Kaster<T>) -> dyn Kaster<T> {
         let replica = original.clone();
         Some(replica)
     }
 }
 
-impl caster for SubCast<T> {
-    fn new() -> (SubCast<T>, SubCast<T>) {
+impl<T> Kaster<T> for SubKast<T> {
+    fn new() -> SubKast<T> {
         let (service_tx, subscribe_rx) = kanal::unbounded_async();
-
-        (
-            SubCast {
-                service_tx,
-                subscribe_rx,
-            },
-            SubCast { tx: tx_b, rx: rx_a },
-        )
+        SubKast {
+            service_tx,
+            subscribe_rx,
+        }
     }
 
-    fn share(original: Caster<T>) -> Option<Caster<T>>
-    where
-        T: Clone,
-    {
+    fn share(original: dyn Kaster<T>) -> dyn Kaster<T> {
         let replica = original.clone();
         Some(replica)
     }
@@ -104,7 +89,7 @@ impl caster for SubCast<T> {
 // ////////////////////////////////////////////////////////////////////////
 // Websockets
 // /////////////////////////////////////////////////////////
-
+/*
 async fn handle_connection(
     peer: SocketAddr,
     stream: TcpStream,
@@ -212,6 +197,7 @@ async fn ws_listen(event_tx: UnboundedSender<GameEvent>, listener: TcpListener) 
         }
     }
 }
+*/
 
 // ////////////////////////////////////////////////////////////////////////
 // Indexing

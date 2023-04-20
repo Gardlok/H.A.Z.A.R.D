@@ -1,8 +1,8 @@
+mod base;
 mod order;
-mod protocols;
+use base::protocols::{DirectKast, MessageType, SharedKast, SubKast};
 
 use order::pallet::home;
-use protocols as pro;
 
 use surrealdb::engine::local::Mem;
 use surrealdb::Surreal;
@@ -21,8 +21,6 @@ use std::error::Error;
 use std::io;
 use std::net::SocketAddr;
 
-use std::collections::HashMap;
-
 use console_engine::{
     events::Event,
     forms::{Checkbox, Form, FormField, FormOptions, FormStyle, FormValue, Radio},
@@ -34,21 +32,19 @@ use crossterm::event::KeyEvent;
 // DB
 pub struct SurrealDeal {
     database: surrealdb::engine::local::Db,
-    connections: HashMap<id: u8, tx: AsyncSender<MessageType>>,
-    sharedcast: pro::SharedCast, //kanal::AsyncSender<MessageType>,
-    intake: AsyncReceiver<MessageType>,
+    sharedkast: SharedKast<MessageType>,
+    directkast: HashMap<u8, DirectKast<MessageType>>,
 }
 
 impl SurrealDeal {
-    pub fn new() -> SurrealDeal {
+    pub async fn new() -> SurrealDeal {
         // Create channels
-        let (tx, rx) = pro::SharedCast;
+        let dx = SharedKast::new();
 
         SurrealDeal {
             database: Surreal::new::<Mem>(()).await?,
-            connections: Hashmap::new(),
-            sharedcast: None,
-            intake: None,
+            sharedkast: SharedKast::new(),
+            directkast: HashMap::new(),
         }
     }
 
@@ -61,8 +57,6 @@ impl SurrealDeal {
             .with_span_events(FmtSpan::FULL)
             .init();
 
-        tracing::info!("server running on {}", addr);
-
         // Init things
 
         // Surreal
@@ -73,7 +67,7 @@ impl SurrealDeal {
 
         loop {
             tokio::spawn(async move {
-                tracing::debug!("accepted connection");
+                tracing::debug!("Started");
 
                 if let Err(e) = unimplemented!() {
                     tracing::info!("an error occurred; error = {:?}", e);
