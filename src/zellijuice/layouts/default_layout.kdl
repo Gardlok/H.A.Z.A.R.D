@@ -4,7 +4,7 @@ layout {
             plugin location="zellij:tab-bar"
         }
         pane size="69%" split_direction="vertical" {
-            pane name="DOIT!" focus=true size="70%" 
+            pane name="DOIT!" focus=true size="70%" cwd="/home/anthony/Dev" 
             pane name="assistance" size="30%" stacked=true {
                 pane name="My Stuff" {
                     plugin location="zellij:strider"

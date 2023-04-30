@@ -1,104 +1,148 @@
-#![warn(rust_2018_idioms)]
-#![feature(async_fn_in_trait)]
 use std::{
-    collections::{hash_map::DefaultHasher, HashMap},
+    cmp::min,
     env,
     error::Error as StdError,
+    fmt,
     hash::{Hash, Hasher},
     io,
     net::SocketAddr,
 };
 
+use hashbrown::HashMap;
+
 use anyhow::{Error, Result};
 
-use surrealdb::engine::local::Mem;
-use surrealdb::Surreal;
-//use bincode;  //TODO
+//#[cfg(feature = "alloc")]
+use bitvec::prelude::*;
+use byteorder::BigEndian;
+
+use cookie::bytes::{le_u16, le_u32, le_u8};
+use cookie_factory as cookie;
 
 use async_tungstenite::accept_async;
 use futures::SinkExt;
 use kanal::{AsyncReceiver, AsyncSender, ReceiveError, SendError};
 use tokio::net::{TcpListener, TcpStream};
 use tungstenite::{Error as TungError, Message, Result as TungResult};
+
 //use axum;     //TODO
 
+pub struct InterOps(bool);
+
 // ////////////////////////////////////////////////////////////////////////
-// Common
+// Common Bits
 // /////////////////////////////////////////////////////////
+
+//                             Common Frame
+//     [--------------------------- 32b --------------------------]
+//        FLAG       RX ID      RSV    TX ID     RSV        FLAG
+//     [--------]    [----]    [---]   [----]   [---]    [--------]
+//          8b-FL    6b-ID1    2b-AA   6-ID2    2b-AB     8b-FL
+//
+
+#[derive(Debug)]
+pub struct Frame {
+    pub frame: Blob,
+    pub payload: Blob,
+}
+
+// ////////////////////////////////////////////////////////////////////////
+// Common Bit Practice
+// /////////////////////////////////////////////////////////
+//
+
+#[derive(Debug)]
 pub enum MessageType {
-    Poll,
     Push,
     Pull,
+    Poll,
 }
+
+#[derive(Debug)]
+pub enum ProtocolType {
+    Kanal,
+    WS,
+    RPC,
+    HTTP,
+}
+
+#[derive(Debug)]
+pub enum ProtocolAttributes {}
 
 // ////////////////////////////////////////////////////////////////////////
 // LoKal Interopts
 // /////////////////////////////////////////////////////////
 
-struct Id(usize);
-
-pub struct KanalComm {
-    id: Id,
-    broadkast: KanalOps,
-    directs: HashMap<usize, AsyncSender<MessageType>>,
-    subsciptions: HashMap<usize, AsyncReceiver<MessageType>>,
-}
-
-pub struct KanalOps {
-    id: usize,
-    tx: AsyncSender<MessageType>,
-    rx: AsyncReceiver<MessageType>,
-}
-
-pub trait InterOps {
-    fn new(size: Option<usize>) -> Self;
-    fn new_paired(size: Option<usize>) -> (Self, Self);
-    fn share() -> Self;
-    fn register() -> Result<(), ReceiveError>;
-}
-
-impl InterOps for KanalOps {
-    fn new(capacity: Option<usize>) -> KanalOps {
-        let (tx, rx) = match capacity {
-            None => kanal::unbounded_async(),
-            Some(cap) => kanal::bounded_async(cap),
-        };
-        KanalOps { id: 0, tx, rx }
+mod ModKanal {
+    use super::*;
+    pub struct KanalFrame {
+        publisher_id: Option<usize>,
     }
 
-    fn new_paired(capacity: Option<usize>) -> (KanalOps, KanalOps) {
-        let (tx_a, rx_a, tx_b, rx_b) = match capacity {
-            None => {
-                let (tx_a, rx_a) = kanal::unbounded_async();
-                let (tx_b, rx_b) = kanal::unbounded_async();
-                (tx_a, rx_b, tx_b, rx_a)
+    struct Id(usize);
+
+    pub struct KanalComm {
+        id: Id,
+        broadkast: KanalOps,
+        directs: HashMap<usize, AsyncSender<MessageType>>,
+        subsciptions: HashMap<usize, AsyncReceiver<MessageType>>,
+    }
+
+    pub struct KanalOps {
+        id: usize,
+        tx: AsyncSender<MessageType>,
+        rx: AsyncReceiver<MessageType>,
+    }
+
+    impl KanalOps {
+        fn new(capacity: Option<usize>) -> KanalOps {
+            let (tx, rx) = match capacity {
+                None => kanal::unbounded_async(),
+                Some(cap) => kanal::bounded_async(cap),
+            };
+            KanalOps { id: 0, tx, rx }
+        }
+
+        fn new_paired(capacity: Option<usize>) -> (KanalOps, KanalOps) {
+            let (tx_a, rx_a, tx_b, rx_b) = match capacity {
+                None => {
+                    let (tx_a, rx_a) = kanal::unbounded_async();
+                    let (tx_b, rx_b) = kanal::unbounded_async();
+                    (tx_a, rx_b, tx_b, rx_a)
+                }
+                Some(cap) => {
+                    let (tx_a, rx_a) = kanal::unbounded_async();
+                    let (tx_b, rx_b) = kanal::unbounded_async();
+                    (tx_a, rx_b, tx_b, rx_a)
+                }
+            };
+            (
+                KanalOps {
+                    id: 0,
+                    tx: tx_a,
+                    rx: rx_a,
+                },
+                KanalOps {
+                    id: 0,
+                    tx: tx_b,
+                    rx: rx_b,
+                },
+            )
+        }
+
+        fn share(original: KanalOps) -> KanalOps {
+            KanalOps {
+                id: 0,
+                tx: original.tx.clone(),
+                rx: original.rx.clone(),
             }
-            Some(cap) => {
-                let (tx_a, rx_a) = kanal::unbounded_async();
-                let (tx_b, rx_b) = kanal::unbounded_async();
-                (tx_a, rx_b, tx_b, rx_a)
-            }
-        };
+        }
 
-        KanalOps {
-            id: 0,
-            tx: tx_a,
-            rx: rx_a,
-        };
-        KanalOps {
-            id: 0,
-            tx: tx_b,
-            rx: rx_b,
-        };
-    }
-
-    fn share(original: KanalOps) -> KanalOps {
-        original.clone()
-    }
-
-    async fn register(self) -> Result<(), ReceiveError> {
-        self.tx.send(MessageType::Poll).await?;
-        self.id = self.rx.recv().await?
+        async fn register(self) -> Result<usize, ReceiveError> {
+            self.tx.send(MessageType::Push).await;
+            let _ = self.rx.recv().await?;
+            Ok(self.id)
+        }
     }
 }
 
@@ -218,3 +262,50 @@ async fn ws_listen(event_tx: UnboundedSender<GameEvent>, listener: TcpListener) 
 // ////////////////////////////////////////////////////////////////////////
 // Indexing
 // /////////////////////////////////////////////////////////
+
+// ////////////////////////////////////////////////////////////////////////
+// Helpers - Blob
+// /////////////////////////////////////////////////////////
+
+pub struct Blob(pub Vec<u8>);
+
+impl fmt::Debug for Blob {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let slice_len = self.0.len();
+        let shown_len = 20;
+        let slice = &self.0[..min(shown_len, slice_len)];
+        write!(f, "[")?;
+        for (i, x) in slice.iter().enumerate() {
+            let prefix = if i > 0 { " " } else { "" };
+            write!(f, "{}{:02x}", prefix, x)?;
+        }
+        if slice_len > shown_len {
+            write!(f, " + {} bytes", slice_len - shown_len)?;
+        }
+        write!(f, "]")
+    }
+}
+
+impl Blob {
+    fn new(slice: &[u8]) -> Self {
+        Self(slice.into())
+    }
+}
+
+/*
+
+impl Packet {
+    pub fn meta(i: parse::Input) -> parse::Result<Self> {
+
+        let (i, header) = match typ {
+                Type::EchoRequest => map(Echo::parse, Header::EchoRequest)(i)?,
+                Type::EchoReply => map(Echo::parse, Header::EchoReply)(i)?,
+                _ => map(be_u32, Header::Other)(i)?,
+            };
+
+        let payload = Blob::new(i);
+
+
+
+
+*/

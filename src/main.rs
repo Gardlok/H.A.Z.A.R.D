@@ -1,6 +1,9 @@
+#![feature(allocator_api)]
+#![feature(async_fn_in_trait)]
 mod base;
 mod order;
-use base::protocols::{InterOps, KanalOps, MessageType};
+use base::logging::Logging;
+use base::protocols::{InterOps, MessageType};
 
 use order::pallet::home;
 
@@ -29,6 +32,7 @@ use console_engine::{
 };
 use crossterm::event::KeyEvent;
 
+/*
 // DB
 pub struct SurrealDeal {
     database: surrealdb::engine::local::Db,
@@ -48,60 +52,30 @@ impl SurrealDeal {
         }
     }
 
-    #[tokio::main]
-    async fn main() -> Result<(), Box<dyn Error>> {
-        use tracing_subscriber::{fmt::format::FmtSpan, EnvFilter};
-        tracing_subscriber::fmt()
-            // RUST_LOG=tokio=trace
-            .with_env_filter(EnvFilter::from_default_env().add_directive("chat=info".parse()?))
-            .with_span_events(FmtSpan::FULL)
-            .init();
+    */
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    Logging::setup();
+    tracing::info!("test trace!");
+    Ok(())
+}
 
-        // Init things
+async fn process() -> Result<(), Box<dyn Error>> {
+    unimplemented!();
+    loop { /*
+         tokio::select! {
+             Some(msg) = peer.rx.recv() => {
+                 //peer.lines.send(&msg).await?;
+             //result = peer.lines.next() => match result {
+                 Some(Ok(msg)) => {
 
-        // Surreal
-
-        // Primary UI
-
-        // SPSC runtime for DB and PUI
-
-        loop {
-            tokio::spawn(async move {
-                tracing::debug!("Started");
-
-                if let Err(e) = unimplemented!() {
-                    tracing::info!("an error occurred; error = {:?}", e);
-                }
-            });
-        }
+                 }
+                 Some(Err(e)) => {
+                     tracing::error!("error for {}; = {:?}", "bob", e);
+                 }
+                 None => break,
+             },
+         }*/
     }
-
-    async fn process() -> Result<(), Box<dyn Error>> {
-        // let username = match lines.next().await {
-        //     Some(Ok(line)) => line,
-        //     _ => {
-        //         tracing::error!("Failed to get username from {}. Client disconnected.", addr);
-        //         return Ok(());
-        //     }
-        // };
-
-        loop {
-            tokio::select! {
-                Some(msg) = peer.rx.recv() => {
-                    peer.lines.send(&msg).await?;
-                }
-                result = peer.lines.next() => match result {
-                    Some(Ok(msg)) => {
-
-                    }
-                    Some(Err(e)) => {
-                        tracing::error!("error for {}; = {:?}", username, e);
-                    }
-                    None => break,
-                },
-            }
-        }
-
-        Ok(())
-    }
+    Ok(())
 }
