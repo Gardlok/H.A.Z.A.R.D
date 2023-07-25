@@ -116,7 +116,7 @@ mod Proc {
     mod Engine {
         use super::*;
 
-        pub fn get_ready() -> {
+        pub fn get_ready() -> () {
             let (tx_watch, rx_watch) = kanals();
             let mut proc_map = HashMap::new();
             loop {}
